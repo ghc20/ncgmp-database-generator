@@ -121,11 +121,11 @@ def createFeatureClass(thisDB,featureDataSet,featureClass,shapeType,fieldDefs):
                 addMsgAndPrint(arcpy.GetMessages(2))
     except:
         addMsgAndPrint(arcpy.GetMessages())
-        addMsgAndPrint('Failed to create feature class '+featureClass+' in dataset '+featureDataSet)
+        addMsgAndPrint('Failed to create feature class '+ featureClass +' in dataset '+featureDataSet)
         
         
 def main(thisDB,coordSystem,nCrossSections):
-	# create feature dataset GeologicMap
+	# create feature dataset GeologicMap #
 	addMsgAndPrint('  Creating feature dataset GeologicMap...')
 	try:
 		arcpy.CreateFeatureDataset_management(thisDB,'GeologicMap')
@@ -149,74 +149,61 @@ def main(thisDB,coordSystem,nCrossSections):
                 
 	# line feature classes
 	featureClasses = ['ContactsAndFaults']
-	for fc in ['GeologicLines','CartographicLines','IsoValueLines']:
+	for fc in ['OtherLines']:
             if fc in OptionalElements:
                 featureClasses.append(fc)
 	for featureClass in featureClasses:
             fieldDefs = tableDict[featureClass]
             createFeatureClass(thisDB,'GeologicMap',featureClass,'POLYLINE',fieldDefs)
+            
+        # create topology
+        addMsgAndPrint('  Creating topology GeologicMapTopology...')
+        arcpy.CreateTopology_management('GeologicMap','GeologicMapTopology')
 
-	# point feature classes
-	featureClasses = []
-	for fc in ['OrientationPoints','GeochronPoints','FossilPoints','MapUnitPoints','Stations',
-		      'GenericSamples','GenericPoints']:
+
+	# create feature dataset StationData #
+	hasStationData = False
+        for fc in ['OrientationDataPoints','StationPoints','SamplePoints']:
             if fc in OptionalElements:
-                featureClasses.append(fc)
-        for featureClass in featureClasses:
-            if featureClass == 'MapUnitPoints': 
-                fieldDefs = tableDict['MapUnitPolys']
-            else:	
+                hasStationData = True
+                break
+        addMsgAndPrint('  continue...')
+	if hasStationData:
+            addMsgAndPrint('  Creating feature dataset StationData...')
+            try:
+                    arcpy.CreateFeatureDataset_management(thisDB,'StationData')
+            except:
+                    addMsgAndPrint(arcpy.GetMessages(2))
+            if coordSystem <> '#':
+                    try:
+                        arcpy.DefineProjection_management(thisDB+'/StationData',coordSystem)
+                    except:
+                        addMsgAndPrint(arcpy.GetMessages(2))
+                        
+            # create feature classes in StationData  
+            # point feature classes
+            featureClasses = []
+            for fc in ['OrientationDataPoints','StationPoints','SamplePoints']:
+                if fc in OptionalElements:
+                    featureClasses.append(fc)
+            for featureClass in featureClasses:	
                 fieldDefs = tableDict[featureClass]
-            createFeatureClass(thisDB,'GeologicMap',featureClass,'POINT',fieldDefs)
+                createFeatureClass(thisDB,'StationData',featureClass,'POINT',fieldDefs)
+            
 
-	# create feature dataset CorrelationOfMapUnits
-	if 'CorrelationofMapUnits' in OptionalElements:
-            addMsgAndPrint('  Creating feature dataset CorrelationOfMapUnits...')
-            arcpy.CreateFeatureDataset_management(thisDB,'CorrelationOfMapUnits')
-            fieldDefs = tableDict['CMUMapUnitPolys']
-            createFeatureClass(thisDB,'CorrelationOfMapUnits','CMUMapUnitPolys','POLYGON',fieldDefs)
-            fieldDefs = tableDict['CMULines']
-            createFeatureClass(thisDB,'CorrelationOfMapUnits','CMULines','POLYLINE',fieldDefs)
-            fieldDefs = tableDict['CMUPoints']
-            createFeatureClass(thisDB,'CorrelationOfMapUnits','CMUPoints','POINT',fieldDefs)
+	# create feature classes outside of GeologicMap and StationData
+	# polygon feature classes
+        fieldDefs = tableDict['DataSourcePolys']
+        createFeatureClass(thisDB,'', 'DataSourcePolys','POLYGON',fieldDefs)
 	
-	# create CrossSections
-	if nCrossSections > 26:
-	    nCrossSections = 26
-	if nCrossSections < 0:
-            nCrossSections = 0
-	# note space in position 0
-	alphabet = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        # polyline feature classes
+        if 'CartographicLines' in OptionalElements:
+            fieldDefs = tableDict['CartographicLines']
+            createFeatureClass(thisDB,'','CartographicLines','POLYLINE',fieldDefs)	
 	
-	for n in range(1,nCrossSections+1):
-            xsLetter = alphabet[n]
-            xsName = 'CrossSection'+xsLetter
-            xsN = 'CS'+xsLetter
-            #create feature dataset CrossSectionA
-            addMsgAndPrint('  Creating feature data set CrossSection'+xsLetter+'...')
-            arcpy.CreateFeatureDataset_management(thisDB,xsName)
-            fieldDefs = tableDict['MapUnitPolys']
-            fieldDefs[0][0] = xsN+'MapUnitPolys_ID'
-            createFeatureClass(thisDB,xsName,xsN+'MapUnitPolys','POLYGON',fieldDefs)
-            fieldDefs = tableDict['ContactsAndFaults']
-            fieldDefs[0][0] = xsN+'ContactsAndFaults_ID'
-            createFeatureClass(thisDB,xsName,xsN+'ContactsAndFaults','POLYLINE',fieldDefs)
-            fieldDefs = tableDict['OrientationPoints']
-            fieldDefs[0][0] = xsN+'OrientationPoints_ID'
-            createFeatureClass(thisDB,xsName,xsN+'OrientationPoints','POINT',fieldDefs)
-	
-	# create feature classes outside of geologic map
-	featureClasses = ['DataSourcePolys']
-	for fc in ['CartographicLines']:
-            if fc in OptionalElements:
-                featureClasses.append(fc)
-	for featureClass in featureClasses:
-            fieldDefs = tableDict[featureClass]
-            createFeatureClass(thisDB,'',featureClass,'POLYGON',fieldDefs)	
-	
-	# create tables
+	# create tables #
 	tables = ['DescriptionOfMapUnits','DataSources','Glossary','SysInfo']
-	for tb in ['RepurposedSymbols','StandardLithology','ExtendedAttributes','GeologicEvents']:
+	for tb in ['StandardLithology','ExtendedAttributes','GeologicEvents']:
             if tb in OptionalElements:
                 tables.append(tb)
 	for table in tables:
@@ -236,20 +223,12 @@ def main(thisDB,coordSystem,nCrossSections):
             except:
                 addMsgAndPrint(arcpy.GetMessages())
 
-        # if cartoReps = True, add cartographic representations to all feature classses
-        if cartoReps:
-            arcpy.env.workspace = thisDB
-            datasets = arcpy.ListDatasets()
-            for dataset in datasets:
-                arcpy.env.workspace = thisDB+'/'+dataset
-                fcs = arcpy.ListFeatureClasses()
-                for fc in fcs:
-                    addMsgAndPrint('  Adding cartographic representations to '+fc)
-                    try:
-                        arcpy.AddRepresentation_cartography(fc,fc+'_rep','RuleID','Override',default,default,'NO_ASSIGN')
-                    except:
-                        addMsgAndPrint(arcpy.GetMessages(2))
-
+        # create relationships
+        # create relationship StationSampleLink
+        if arcpy.Exists('StationData/StationPoints') and arcpy.Exists('StationData/SamplePoints'):
+            addMsgAndPrint('  Creating relationship StationSampleLink...')
+            arcpy.CreateRelationshipClass_management('StationData/StationPoints', 'StationData/SamplePoints', 'StationData/StationSampleLink', "SIMPLE", "Sample",
+                "Station", "NONE", "ONE_TO_MANY", "NONE", "StationPoints_ID", "StationID")
                        
 
 def createDatabase(outputDir,thisDB):
